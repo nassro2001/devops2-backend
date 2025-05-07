@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-configmap
+  namespace: {{ .Values.namespace }}
+data:
+  POSTGRES_DB: {{ .Values.postgres.config.database | quote }}
+  POSTGRES_HOST: {{ .Values.postgres.config.host | quote }}

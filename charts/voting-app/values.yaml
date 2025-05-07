@@ -1,0 +1,50 @@
+nameOverride: ""
+fullnameOverride: ""
+
+namespace: voting-app
+
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    name: db
+    port: 5432
+  credentials:
+    username: "postgres"
+    password: "postgres"
+  persistence:
+    enabled: true
+    storageClassName: manual
+    size: 1Gi
+    hostPath: "/mnt/data/postgres"
+  config:
+    database: "postgres"
+    host: "postgres"
+
+serverVotingBackend:
+  image:
+    repository: nassro123/voting-backend
+    tag: latest
+  replicas: 3
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+serverVotingFrontend:
+  replicas: 3
+  image:
+    repository: nassro123/voting-frontend
+    tag: latest
+
+ingress:
+  enabled: true
+  host: "voting-app.local"
+  backendPath: "/api"
+  frontendPath: "/"

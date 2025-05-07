@@ -1,0 +1,77 @@
+# templates/backend-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+# Deployed inside your app namespace (voting-app)
+metadata:
+  name: {{ .Release.Name }}-backend
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Release.Name }}-backend
+spec:
+  # runs multiple backend pods to handle high load
+  replicas: {{ .Values.serverVotingBackend.replicas }}
+  selector:
+    # Ensures the pods match this deployment and can be managed together
+    matchLabels:
+      app: {{ .Release.Name }}-backend
+      # Defines how each backend pod should be configured
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-backend
+    spec:
+      # Pulls the backend image from Docker Hub
+      containers:
+        - name: server-voting-backend-container
+          image: "{{ .Values.serverVotingBackend.image.repository }}:{{ .Values.serverVotingBackend.image.tag }}"
+          ports:
+            - containerPort: 8080
+              # These allow the backend to connect to the PostgreSQL DB.
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-configmap
+                  key: POSTGRES_DB
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-configmap
+                  key: POSTGRES_HOST
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_PASSWORD
+            # Ensures the pod doesn't starve or overload the cluster
+          resources:
+            requests:
+              memory: "{{ .Values.serverVotingBackend.resources.requests.memory }}"
+              cpu: "{{ .Values.serverVotingBackend.resources.requests.cpu }}"
+            limits:
+              memory: "{{ .Values.serverVotingBackend.resources.limits.memory }}"
+              cpu: "{{ .Values.serverVotingBackend.resources.limits.cpu }}"
+
+---
+
+# templates/backend-service.yaml defines a Kubernetes Service that exposes the backend pods internally.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-backend-service
+  namespace: {{ .Values.namespace }}
+# Listens on port 8080, forwards traffic to the backend pods
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+# Matches the pods with the same label as in the Deployment
+  selector:
+    app: {{ .Release.Name }}-backend

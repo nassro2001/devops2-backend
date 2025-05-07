@@ -1,0 +1,110 @@
+# PersistentVolume this defines actual storage space on the node
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres-pv
+  labels:
+    type: local
+spec:
+  storageClassName: {{ .Values.postgres.persistence.storageClassName }}
+  capacity:
+    storage: {{ .Values.postgres.persistence.size }}
+    # Only one pod can write to this volume at a time (which is fine for a single DB instance).
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: {{ .Values.postgres.persistence.hostPath }}
+
+---
+# PersistentVolumeClaim a claim to use the PV above
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pv-claim
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: postgres
+    tier: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.postgres.persistence.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.postgres.persistence.size | default }}
+
+---
+# Postgres Service exposes the pod internally to the cluster on port 5432
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: postgres
+    tier: database
+spec:
+  ports:
+    - port: 5432
+  selector:
+    app: postgres
+    tier: database
+  clusterIP: None
+
+---
+# Postgres Deployment this creates a pod running the postgreSQL container
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: postgres
+    tier: database
+spec:
+  selector:
+    matchLabels:
+      app: postgres
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: postgres
+        tier: database
+    spec:
+      containers:
+        - name: postgres
+          image: "{{ .Values.postgres.image.repository }}"
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          # Pulls DB credentials from Kubernetes Secrets and ConfigMaps.
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-configmap
+                  key: POSTGRES_DB
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+              name: postgres
+              # Mounts the PVC to store database data.
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: postgres-persistance-storage
+              # Connects this pod to the previously created claim and volume.
+      volumes:
+        - name: postgres-persistance-storage
+          persistentVolumeClaim:
+            claimName: postgres-pv-claim

@@ -1,0 +1,63 @@
+# server-voting-frontend Deployment
+apiVersion: apps/v1
+kind: Deployment
+# Deployed inside your app namespace (voting-app)
+metadata:
+  name: {{ .Release.Name }}-frontend
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Release.Name }}-frontend
+spec:
+  # The number of frontend pods (3) is pulled from your values.yaml
+  replicas: {{ .Values.serverVotingFrontend.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-frontend
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-frontend
+    spec:
+      # Uses the Docker image from Docker Hub
+      containers:
+        - name: front-web
+          image: "{{ .Values.serverVotingFrontend.image.repository }}:{{ .Values.serverVotingFrontend.image.tag }}"
+          #The Angular app runs on port 80 inside the container (served by NGINX)
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          imagePullPolicy: Always
+          # Kubernetes checks this endpoint to confirm the pod is alive (not crashed)
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+              # Checks if the app is ready to serve traffic
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 5
+
+---
+# Service – Exposing the Frontend
+# Defines a Kubernetes Service that exposes the frontend pods internally.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-frontend-service
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Release.Name }}-frontend
+    service: frontend
+spec:
+  #Traffic to this service on port 80 is forwarded to port 80 on the pods.
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+  selector:
+    app: {{ .Release.Name }}-frontend
